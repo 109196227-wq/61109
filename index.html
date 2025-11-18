@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>星際神槍手 - 動態難度與升級</title>
+    
+    <!-- 載入 Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+        body {
+            font-family: 'Orbitron', sans-serif;
+            background: radial-gradient(circle at center, #0a011a 0%, #000000 100%);
+            color: #e5e7eb;
+            margin: 0;
+            /* 關鍵變更：移除固定尺寸和隱藏溢出 */
+            min-height: 100vh; /* 確保佔滿至少一屏 */
+            display: flex;
+            justify-content: center; /* 保持水平置中 */
+            align-items: flex-start; /* 讓內容從頂部開始流動 (修復移動設備底部被裁切的問題) */
+            padding: 0; 
+            /* REMOVED: overflow: hidden; */
+            user-select: none; 
+            padding-top: 1rem; /* 增加頂部間距 */
+            padding-bottom: 1rem; /* 增加底部間距 */
+        }
+        #game-container {
+            width: 100%;
+            max-width: 600px; /* 限制最大寬度，改善桌面顯示 */
+            /* 移除 height: 100%; 讓它自然流動 */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: transparent; 
+            padding: 0 1rem; /* 調整為只在左右有 padding，上下靠 body 的 padding */
+            border: 2px solid #14b8a61a;
+            box-shadow: 0 0 50px rgba(20, 184, 166, 0.4); 
+            min-height: 98vh; /* 讓它盡量貼合螢幕，但允許輕微溢出 */
+        }
+
+        #gameCanvas {
+            border: 4px solid #14b8a6; 
+            background-color: #000000;
+            box-shadow: 0 0 40px rgba(20, 184, 166, 0.9);
+            border-radius: 0.5rem; 
+            transition: transform 0.05s; 
+            touch-action: none; 
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14" fill="none" stroke="%2314b8a6" stroke-width="2"/><line x1="16" y1="2" x2="16" y2="30" stroke="%2314b8a6" stroke-width="2"/><line x1="2" y1="16" x2="30" y2="16" stroke="%2314b8a6" stroke-width="2"/></svg>'), crosshair;
+        }
+        .neon-text {
+            text-shadow: 0 0 8px #14b8a6, 0 0 15px #14b8a6, 0 0 20px #06b6d4;
+        }
+        .control-btn {
+            background: linear-gradient(145deg, #14b8a6, #0d9488);
+            color: #000;
+            font-weight: 900;
+            border: none;
+            box-shadow: 0 4px 20px rgba(20, 184, 166, 0.6), 0 0 10px rgba(255, 255, 255, 0.3) inset;
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .control-btn:hover:not([disabled]) {
+            transform: scale(1.05);
+            background: linear-gradient(145deg, #0d9488, #14b8a6);
+            box-shadow: 0 6px 25px rgba(20, 184, 166, 0.9);
+        }
+        #game-info {
+            background-color: #0d011f80;
+            border: 1px solid #14b8a650;
+            border-radius: 0.5rem;
+            padding: 0.5rem 1rem;
+            backdrop-filter: blur(5px);
+            box-shadow: 0 0 15px #06b6d450 inset;
+        }
+        .select-option {
+            border: 2px solid #374151;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-bottom: 0.5rem;
+            transition: all 0.2s;
+            cursor: pointer;
+            background-color: #0a011a80; 
+            backdrop-filter: blur(3px);
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+        }
+        .select-option:hover {
+             background-color: #1f293780;
+        }
+        input[type="radio"]:checked + .select-option,
+        .upgrade-card:hover { /* 升級卡片樣式 */
+             border-color: #ff33ff; 
+             box-shadow: 0 0 15px rgba(255, 51, 255, 0.6);
+             background-color: #5b21b633;
+        }
+        input[type="radio"] {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        #skill-button:not([disabled]) {
+            background: linear-gradient(145deg, #a855f7, #9333ea);
+            box-shadow: 0 0 25px rgba(168, 85, 247, 0.9);
+        }
+        #skill-button:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            background: #4b5563;
+            box-shadow: none;
+        }
+        #message-modal > div {
+            background-color: #0d011f;
+            border: 4px solid #ff33ff;
+            box-shadow: 0 0 30px rgba(255, 51, 255, 0.8);
+            max-width: 90%; 
+        }
+        #modal-title {
+            color: #ff33ff;
+            text-shadow: 0 0 10px #ff33ff;
+        }
+        .upgrade-card {
+            background-color: #111827;
+            border: 2px solid #374151;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body class="p-0">
+
+<div id="game-container" class="bg-[#1a1a2e]">
+    <h1 class="text-4xl font-extrabold mt-4 mb-2 text-[#14b8a6] neon-text sm:text-5xl">《星際神槍手》</h1>
+    <!-- 更新操作提示為手機觸控模式 -->
+    <p class="text-sm text-gray-400 mb-2 font-mono">(在畫面上**拖曳**移動並**長按**發射雷射)</p>
+
+    <!-- 遊戲畫布 -->
+    <canvas id="gameCanvas" class="flex-grow-0 flex-shrink-0"></canvas>
+
+    <!-- 狀態資訊顯示 (分數, 等級, 生命) -->
+    <div id="game-info" class="flex justify-between w-full max-w-lg mt-3 mb-1 text-2xl font-mono px-4">
+        <span class="text-cyan-400">分數: <span id="score">0</span></span>
+        <span class="text-yellow-400">等級: <span id="level">1</span></span>
+        <span class="text-red-500">生命: <span id="lives">3</span></span>
+    </div>
+
+    <!-- 經驗值條 -->
+    <div class="w-full max-w-lg px-4 mb-2">
+        <div class="h-2 bg-gray-700 rounded-full">
+            <div id="xp-bar" class="h-full rounded-full transition-all duration-300" style="width: 0%; background-color: #34d399;"></div>
+        </div>
+        <div id="xp-text" class="text-xs text-gray-400 text-right mt-1 font-mono">0/5 XP</div>
+    </div>
+
+    <!-- 技能按鈕 -->
+    <div class="w-full max-w-lg flex justify-center pb-4 px-4">
+        <button id="skill-button" class="w-full py-3 text-xl font-bold rounded-lg transition duration-150" disabled>
+            ⚡ <span id="skill-name">巨型炸彈</span> (<span id="skill-count">3</span>)
+        </button>
+    </div>
+    
+    <!-- 遊戲結束/開始/升級 訊息模組 -->
+    <div id="message-modal" class="fixed inset-0 bg-black bg-opacity-90 flex justify-center items-center z-50 hidden">
+        <div class="bg-gray-900 p-8 rounded-2xl text-center w-full max-w-md">
+            <h2 id="modal-title" class="text-4xl font-extrabold mb-4 neon-text"></h2>
+            <p id="modal-message" class="text-lg mb-4 text-gray-300 font-mono"></p>
+            
+            <!-- 啟動/遊戲結束 選單 -->
+            <div id="start-menu" class="text-left mb-6 space-y-4">
+                
+                <!-- 武器選擇器 -->
+                <div>
+                    <p class="text-xl font-bold mb-3 text-yellow-400">選擇主武器 [WEAPON]:</p>
+                    <label for="select-blaster" class="block">
+                        <input type="radio" id="select-blaster" name="weapon" value="blaster" checked>
+                        <div class="select-option">
+                            <span class="font-semibold text-[#ff33ff]">標準雷射 (BLASTER)</span>
+                            <p class="text-sm text-gray-400">✅ 平衡型：中等射速，紫色光束。</p>
+                        </div>
+                    </label>
+                    <label for="select-cannon" class="block">
+                        <input type="radio" id="select-cannon" name="weapon" value="cannon">
+                        <div class="select-option">
+                            <span class="font-semibold text-[#FFFF00]">重型火砲 (CANNON)</span>
+                            <p class="text-sm text-gray-400">💥 強力型：射速慢，**黃色能量彈**（大範圍）。</p>
+                        </div>
+                    </label>
+                    <label for="select-rapid" class="block">
+                        <input type="radio" id="select-rapid" name="weapon" value="rapid">
+                        <div class="select-option">
+                            <span class="font-semibold text-[#00FFFF]">脈衝機槍 (RAPID)</span>
+                            <p class="text-sm text-gray-400">⚡ 速度型：**極高射速**，青色光點（小範圍）。</p>
+                        </div>
+                    </label>
+                </div>
+
+                <!-- 技能選擇器 -->
+                <div>
+                    <p class="text-xl font-bold mb-3 text-purple-400">選擇超級技能 [SKILL]:</p>
+                    <label for="select-megabomb" class="block">
+                        <input type="radio" id="select-megabomb" name="skill" value="megabomb" checked>
+                        <div class="select-option">
+                            <span class="font-semibold text-[#A855F7]">巨型炸彈 (MEGA BOMB)</span>
+                            <p class="text-sm text-gray-400">💣 開局 **3 次**。立即清空螢幕上所有威脅！</p>
+                        </div>
+                    </label>
+                    <label for="select-shield" class="block">
+                        <input type="radio" id="select-shield" name="skill" value="shield">
+                        <div class="select-option">
+                            <span class="font-semibold text-[#3b82f6]">時空護盾 (SHIELD)</span>
+                            <p class="text-sm text-gray-400">🛡️ 開局 **2 次**。啟動後無敵 3 秒。</p>
+                        </div>
+                    </label>
+                </div>
+
+            </div>
+            
+            <!-- 等級升級選單 (隱藏 by default) -->
+            <div id="upgrade-menu" class="hidden text-left mb-6 space-y-3">
+                <p class="text-xl font-bold mb-3 text-lime-400">選擇強化模組 [LEVEL UP]:</p>
+                <div id="upgrade-options" class="space-y-3">
+                    <!-- Upgrades will be inserted here -->
+                </div>
+            </div>
+
+            <button id="modal-button" class="w-full py-4 text-2xl font-bold rounded-lg control-btn">
+                [啟動] 鎖定配置，開始作戰！
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- 武器配置 (不變) ---
+    const WEAPONS = {
+        'blaster': { cooldown: 10, bulletSize: 4, bulletColor: '#ff33ff', bulletHeightMultiplier: 6, damage: 1 }, 
+        'cannon': { cooldown: 25, bulletSize: 8, bulletColor: '#FFFF00', bulletHeightMultiplier: 4, damage: 3 }, 
+        'rapid': { cooldown: 4, bulletSize: 3, bulletColor: '#00FFFF', bulletHeightMultiplier: 8, damage: 0.5 } 
+    };
+
+    // --- 技能配置 (不變) ---
+    const SKILLS = {
+        'megabomb': {
+            name: '巨型炸彈',
+            initialCharges: 3,
+            color: '#A855F7', 
+            effect: function() {
+                const canvasCenterX = canvas.width / 2;
+                const canvasCenterY = canvas.height / 2;
+                for (let i = 0; i < 50; i++) {
+                    createParticle(canvasCenterX, canvasCenterY, SKILLS[gameState.currentSkillId].color);
+                }
+                gameState.enemies.forEach(enemy => {
+                    createExplosion(enemy.x, enemy.y, enemy.color);
+                    gainXP(CFG.XP_PER_KILL); 
+                    gameState.score += CFG.SCORE_PER_KILL; 
+                });
+                gameState.enemies = []; 
+                triggerScreenShake(30);
+                updateInfoDisplay();
+            }
+        },
+        'shield': {
+            name: '時空護盾',
+            initialCharges: 2,
+            color: '#3b82f6',
+            effect: function() {
+                gameState.isInvulnerable = true;
+                gameState.shieldDuration = 180; // 3 seconds * 60 FPS
+                triggerScreenShake(10);
+            }
+        }
+    };
+    
+    // --- 升級配置 ---
+    const UPGRADES = [
+        {
+            id: 'damage',
+            name: '火力強化 (DMG Up)',
+            description: '永久增加子彈傷害 20%。',
+            icon: '💥',
+            apply: (state) => { state.upgrades.damageMultiplier += 0.2; }
+        },
+        {
+            id: 'firerate',
+            name: '射速優化 (Rate Up)',
+            description: '永久縮短主武器冷卻時間 10%。',
+            icon: '⚡',
+            apply: (state) => { state.upgrades.fireRateMultiplier *= 0.9; }
+        },
+        {
+            id: 'maxlife',
+            name: '生命模組 (+1 Max Life)',
+            description: '永久增加 1 點最大生命值，並立即補滿。',
+            icon: '❤️',
+            apply: (state) => { 
+                state.upgrades.maxLivesBonus += 1; 
+                state.maxLives = CFG.MAX_LIVES + state.upgrades.maxLivesBonus;
+                state.lives = state.maxLives; 
+            }
+        },
+        {
+            id: 'skillcharge',
+            name: '技能充能 (+1 Charge)',
+            description: '立即獲得 1 次超級技能充能。',
+            icon: '🔋',
+            apply: (state) => { state.skillCharges += 1; updateSkillButton(); }
+        },
+        {
+            id: 'speed',
+            name: '機動強化 (Speed Up)',
+            description: '永久增加戰機移動速度 15%。',
+            icon: '🚀',
+            apply: (state) => { state.upgrades.speedMultiplier *= 1.15; }
+        }
+    ];
+
+    // 遊戲配置 (動態難度相關)
+    let CFG = {
+        BULLET_SPEED: 15,
+        ENEMY_BASE_SPEED: 2.5,
+        ENEMY_SIZE: 45, 
+        ENEMY_SPAWN_RATE: 80, 
+        MAX_LIVES: 3,
+        SCORE_PER_KILL: 10,
+        MAX_PARTICLES: 300, 
+        CANVAS_ASPECT_RATIO: 1 / 1.5,
+        NUM_STARS: 150, 
+        MAX_STAR_SPEED: 5,
+        
+        // --- 經驗值與難度係數 ---
+        XP_PER_KILL: 1, 
+        BASE_ENEMY_HEALTH: 1,
+        ENEMY_HEALTH_PER_LEVEL: 0.5, // 敵人血量每級增加 0.5
+        BASE_XP_TO_LEVEL: 5,
+        XP_INCREASE_PER_LEVEL: 2,
+    };
+
+    // 獲取 DOM 元素
+    const canvas = document.getElementById('gameCanvas');
+    let ctx = null; 
+    const infoScore = document.getElementById('score');
+    const infoLives = document.getElementById('lives');
+    const infoLevel = document.getElementById('level');
+    const infoXPBar = document.getElementById('xp-bar');
+    const infoXPText = document.getElementById('xp-text');
+    const modal = document.getElementById('message-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalMessage = document.getElementById('modal-message');
+    const modalButton = document.getElementById('modal-button');
+    const startMenu = document.getElementById('start-menu');
+    const upgradeMenu = document.getElementById('upgrade-menu');
+    const upgradeOptions = document.getElementById('upgrade-options');
+    const skillButton = document.getElementById('skill-button');
+    const skillNameDisplay = document.getElementById('skill-name');
+    const skillCountDisplay = document.getElementById('skill-count');
+    const gameContainer = document.getElementById('game-container');
+
+
+    // 遊戲狀態
+    let gameState = {
+        running: false,
+        score: 0,
+        maxLives: CFG.MAX_LIVES, // 現在最大生命值會變動
+        lives: CFG.MAX_LIVES,
+        player: null,
+        bullets: [],
+        enemies: [],
+        particles: [],
+        stars: [], 
+        enemySpawnCounter: 0,
+        shakeTime: 0,
+        targetX: 0,
+        isShooting: false, 
+        shootCooldown: 0,
+        currentWeaponId: 'blaster', 
+        currentSkillId: 'megabomb', 
+        skillCharges: 0,
+        isInvulnerable: false, 
+        shieldDuration: 0,
+        
+        // --- 經驗值與升級狀態 ---
+        level: 1,
+        xp: 0,
+        xpToNextLevel: CFG.BASE_XP_TO_LEVEL,
+        isUpgrading: false,
+        upgrades: {
+            damageMultiplier: 1,
+            fireRateMultiplier: 1,
+            maxLivesBonus: 0,
+            speedMultiplier: 1,
+        },
+    };
+
+    // --- 星星物件工廠 (不變) ---
+    function createStar() {
+        const z = Math.random(); 
+        const speed = 1 + z * CFG.MAX_STAR_SPEED; 
+        const size = 1 + z * 1.5; 
+        return {
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            size: size,
+            speed: speed,
+            color: z > 0.7 ? '#FFFFFF' : (z > 0.4 ? '#00FFFF' : '#ff33ff')
+        };
+    }
+    function drawStar(star) {
+        if (!ctx) return;
+        ctx.fillStyle = star.color;
+        ctx.shadowColor = star.color;
+        ctx.shadowBlur = star.size * 2;
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+    function updateStar(star) {
+        star.y += star.speed;
+        if (star.y > canvas.height) {
+            star.y = 0;
+            star.x = Math.random() * canvas.width;
+            const z = Math.random(); 
+            star.speed = 1 + z * CFG.MAX_STAR_SPEED;
+            star.size = 1 + z * 1.5;
+            star.color = z > 0.7 ? '#FFFFFF' : (z > 0.4 ? '#00FFFF' : '#ff33ff');
+        }
+    }
+
+
+    // --- 繪製函數 (小幅修改敵人繪製以顯示 HP) ---
+    function drawPlayer(p) {
+        if (!ctx) return;
+        
+        // 1. 繪製護盾光暈 (如果無敵)
+        if (gameState.isInvulnerable) {
+            const glowRadius = p.width * 1.5;
+            const glowOpacity = 0.5 + Math.sin(Date.now() / 100) * 0.2; 
+            ctx.fillStyle = `rgba(59, 130, 246, ${glowOpacity})`; 
+            ctx.shadowColor = '#3b82f6';
+            ctx.shadowBlur = 40;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y + p.height / 4, glowRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        // 2. 繪製戰機主體 (不變)
+        ctx.fillStyle = '#0a011a'; 
+        ctx.strokeStyle = '#00FFFF'; 
+        ctx.lineWidth = 2;
+        ctx.shadowColor = '#00FFFF';
+        ctx.shadowBlur = 20; 
+        
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y - p.height / 2); 
+        ctx.lineTo(p.x - p.width / 2, p.y + p.height / 2); 
+        ctx.lineTo(p.x + p.width / 2, p.y + p.height / 2); 
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowBlur = 0; 
+
+        // 3. 繪製推進器 (不變)
+        if (gameState.running) {
+            const flameHeight = 15 + Math.random() * 10;
+            const flameWidth = p.width * 0.5;
+            
+            ctx.fillStyle = `rgba(100, 255, 255, 0.9)`;
+            ctx.beginPath();
+            ctx.moveTo(p.x - flameWidth / 4, p.y + p.height / 2 - 5);
+            ctx.lineTo(p.x + flameWidth / 4, p.y + p.height / 2 - 5);
+            ctx.lineTo(p.x, p.y + p.height / 2 + flameHeight * 0.5); 
+            ctx.fill();
+
+            ctx.fillStyle = `rgba(0, 255, 255, 0.4)`;
+            ctx.shadowColor = '#00FFFF';
+            ctx.shadowBlur = 15;
+            ctx.beginPath();
+            ctx.moveTo(p.x - flameWidth / 2, p.y + p.height / 2 - 2);
+            ctx.lineTo(p.x + flameWidth / 2, p.y + p.height / 2 - 2);
+            ctx.lineTo(p.x, p.y + p.height / 2 + flameHeight); 
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+    }
+
+    function drawBullet(b) {
+        if (!ctx) return;
+        const weapon = WEAPONS[b.weaponId];
+        const bulletWidth = b.radius * 2;
+        const bulletHeight = b.radius * weapon.bulletHeightMultiplier * 1.5; 
+        
+        ctx.fillStyle = weapon.bulletColor; 
+        ctx.shadowColor = weapon.bulletColor;
+        ctx.shadowBlur = 30; 
+        
+        ctx.fillRect(b.x - bulletWidth / 2, b.y - bulletHeight / 2, bulletWidth, bulletHeight);
+        
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(b.x - 1, b.y - bulletHeight / 2, 2, bulletHeight);
+
+        ctx.shadowBlur = 0;
+    }
+
+    function drawEnemy(e) {
+        if (!ctx) return;
+        
+        ctx.save();
+        ctx.translate(e.x, e.y);
+        ctx.rotate(e.angle); 
+
+        const halfW = e.width / 2;
+        const halfH = e.height / 2;
+        const primaryColor = e.color; 
+        const secondaryColor = '#FFFFFF'; 
+
+        // 1. 主機身外框與光暈
+        ctx.strokeStyle = primaryColor;
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = primaryColor;
+        ctx.shadowBlur = 20;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; 
+
+        ctx.beginPath();
+        ctx.moveTo(0, -halfH * 0.8);       
+        ctx.lineTo(halfW, halfH * 0.5);    
+        ctx.lineTo(halfW * 0.3, halfH);    
+        ctx.lineTo(-halfW * 0.3, halfH);   
+        ctx.lineTo(-halfW, halfH * 0.5);   
+        ctx.closePath();
+        ctx.stroke();
+        ctx.fill();
+        ctx.shadowBlur = 0; 
+
+        // 2. 脈衝推進器
+        const pulse = Math.sin(Date.now() / 80) * 0.5 + 0.5;
+        const thrusterColor = (primaryColor === '#FF4500' ? '#FFD700' : '#FF33FF');
+        
+        ctx.fillStyle = `rgba(255, 100, 255, ${0.5 + pulse * 0.5})`;
+        ctx.shadowColor = thrusterColor;
+        ctx.shadowBlur = 15 + pulse * 10; 
+
+        const thrusterWidth = halfW * 0.2;
+        const thrusterHeight = halfH * 0.3;
+        
+        ctx.fillRect(-halfW * 0.35, halfH * 0.8, thrusterWidth, thrusterHeight);
+        ctx.fillRect(halfW * 0.15, halfH * 0.8, thrusterWidth, thrusterHeight);
+        
+        ctx.shadowBlur = 0;
+
+        // 3. 中央駕駛艙/核心
+        const coreSize = halfW * 0.2;
+        ctx.fillStyle = secondaryColor; 
+        ctx.shadowColor = primaryColor;
+        ctx.shadowBlur = 25;
+        ctx.beginPath();
+        ctx.arc(0, 0, coreSize, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        
+        ctx.restore(); 
+        
+        // 4. 繪製生命條 (在敵機上方)
+        const hpBarWidth = e.width * 0.8;
+        const hpBarHeight = 3;
+        const hpRatio = e.health / e.maxHealth;
+        const barX = e.x - hpBarWidth / 2;
+        const barY = e.y - e.height / 2 - 8;
+
+        ctx.fillStyle = '#4b5563'; // 背景灰色
+        ctx.fillRect(barX, barY, hpBarWidth, hpBarHeight);
+        
+        ctx.fillStyle = hpRatio > 0.5 ? '#10b981' : (hpRatio > 0.2 ? '#f59e0b' : '#ef4444'); // 綠/黃/紅
+        ctx.fillRect(barX, barY, hpBarWidth * hpRatio, hpBarHeight);
+    }
+
+    function drawParticle(p) {
+        if (!ctx) return;
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = p.life > 30 ? 8 : 0; 
+        ctx.fillRect(p.x, p.y, p.size, p.size);
+        ctx.shadowBlur = 0;
+    }
+    
+    // --- 遊戲物件工廠 ---
+    const PlayerObject = {
+        width: 45, height: 55, x: 0, y: 0, 
+        init(x, y) { this.x = x; this.y = y; gameState.targetX = x; },
+        draw: function() { drawPlayer(this); },
+        update() {
+            // 根據速度升級調整移動速度
+            const speed = 15 * gameState.upgrades.speedMultiplier; 
+            const diff = gameState.targetX - this.x;
+            if (Math.abs(diff) > speed) {
+                this.x += Math.sign(diff) * speed;
+            } else {
+                this.x = gameState.targetX;
+            }
+            
+            if (this.x < this.width / 2) this.x = this.width / 2;
+            else if (this.x > canvas.width - this.width / 2) this.x = canvas.width - this.width / 2;
+        }
+    };
+    function createBullet(x, y, weaponId) {
+        const weapon = WEAPONS[weaponId];
+        return {
+            x: x, y: y - PlayerObject.height / 2, radius: weapon.bulletSize, weaponId: weaponId,
+            damage: weapon.damage, // 基礎傷害
+            draw: function() { drawBullet(this); },
+            update() { this.y -= CFG.BULLET_SPEED; }
+        };
+    }
+    function createEnemy(x, y) {
+        const colors = ['#FF4500', '#FFD700', '#FF00FF']; 
+        
+        // 根據玩家等級計算敵人生命值
+        const baseHealth = CFG.BASE_ENEMY_HEALTH + (gameState.level - 1) * CFG.ENEMY_HEALTH_PER_LEVEL;
+        const health = Math.ceil(baseHealth); // 確保血量是整數
+        
+        return {
+            x: x, y: y, width: CFG.ENEMY_SIZE, height: CFG.ENEMY_SIZE, color: colors[Math.floor(Math.random() * colors.length)],
+            angle: 0,
+            rotationSpeed: (Math.random() - 0.5) * 0.03,
+            health: health,
+            maxHealth: health,
+            draw: function() { drawEnemy(this); },
+            update() { 
+                this.y += CFG.ENEMY_BASE_SPEED; // 敵人移動速度不隨等級變化
+                this.angle += this.rotationSpeed;
+            },
+            getBounds() { return { x: this.x - this.width / 2, y: this.y - this.height / 2, width: this.width, height: this.height }; }
+        };
+    }
+    function createParticle(x, y, color) {
+        return {
+            x, y, size: Math.random() * 4 + 1, color, 
+            vx: (Math.random() - 0.5) * 5, vy: (Math.random() - 0.5) * 5, life: 70, 
+            draw: function() { drawParticle(this); },
+            update() {
+                this.x += this.vx; this.y += this.vy; this.life--;
+            }
+        };
+    }
+
+    // --- 遊戲邏輯與狀態管理 ---
+    
+    function useSkill() {
+        if (!gameState.running || gameState.skillCharges <= 0) {
+            return;
+        }
+        if (gameState.currentSkillId === 'shield' && gameState.isInvulnerable) {
+            return; 
+        }
+
+        const skill = SKILLS[gameState.currentSkillId];
+        if (skill && skill.effect) {
+            skill.effect(); 
+            gameState.skillCharges--;
+            updateSkillButton();
+        }
+    }
+    function createExplosion(x, y, color) {
+        for (let i = 0; i < 20; i++) { 
+            if (gameState.particles.length < CFG.MAX_PARTICLES) {
+                gameState.particles.push(createParticle(x, y, color));
+            }
+        }
+    }
+    function triggerScreenShake(duration) {
+        gameState.shakeTime = duration;
+    }
+    
+    // --- 經驗值與升級系統 ---
+    function getXPToNextLevel(level) {
+        return CFG.BASE_XP_TO_LEVEL + (level - 1) * CFG.XP_INCREASE_PER_LEVEL;
+    }
+
+    function gainXP(amount) {
+        if (gameState.isUpgrading) return;
+        gameState.xp += amount;
+        
+        if (gameState.xp >= gameState.xpToNextLevel) {
+            levelUp();
+        }
+        updateInfoDisplay(); 
+    }
+
+    function levelUp() {
+        gameState.level++;
+        gameState.xp = gameState.xp - gameState.xpToNextLevel; // 處理溢出經驗
+        gameState.xpToNextLevel = getXPToNextLevel(gameState.level);
+        
+        // 確保如果溢出經驗足夠再升一級，則繼續升級 (防止遊戲卡住)
+        if (gameState.xp >= gameState.xpToNextLevel) {
+            levelUp();
+            return;
+        }
+
+        gameState.running = false;
+        gameState.isUpgrading = true;
+        showUpgradeModal();
+    }
+    
+    // --- 核心遊戲迴圈 ---
+    function gameLoop() {
+        if (!gameState.running || !ctx) return; 
+        
+        if (gameState.shakeTime > 0) {
+            canvas.style.transform = `translate(${Math.random() * 6 - 3}px, ${Math.random() * 6 - 3}px)`; 
+            gameState.shakeTime--;
+        } else {
+            canvas.style.transform = 'translate(0, 0)';
+        }
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        updateGameObjects();
+        drawGameObjects();
+
+        if (gameState.lives <= 0) {
+            endGame(`[GAME OVER] 作戰失敗 (LV.${gameState.level})`, `您使用 ${SKILLS[gameState.currentSkillId].name} 技能，最終得分 ${gameState.score} 分！`);
+            return;
+        }
+
+        requestAnimationFrame(gameLoop);
+    }
+    
+    function updateGameObjects() {
+        // 更新星星
+        gameState.stars.forEach(star => updateStar(star));
+
+        // 護盾計時器
+        if (gameState.isInvulnerable && gameState.shieldDuration > 0) {
+            gameState.shieldDuration--;
+            if (gameState.shieldDuration <= 0) {
+                gameState.isInvulnerable = false;
+            }
+        }
+
+        gameState.player.update();
+        const currentWeapon = WEAPONS[gameState.currentWeaponId];
+        // 應用射速強化乘數
+        const currentCooldown = Math.max(2, Math.floor(currentWeapon.cooldown * gameState.upgrades.fireRateMultiplier)); 
+        
+        if (gameState.isShooting) {
+            gameState.shootCooldown--;
+            if (gameState.shootCooldown <= 0) {
+                shoot();
+                gameState.shootCooldown = currentCooldown;
+            }
+        }
+        gameState.bullets = gameState.bullets.filter(bullet => { bullet.update(); return bullet.y > -bullet.radius; });
+        gameState.particles = gameState.particles.filter(p => { p.update(); return p.life > 0; });
+        
+        gameState.enemySpawnCounter++;
+        if (gameState.enemySpawnCounter >= CFG.ENEMY_SPAWN_RATE) {
+            spawnEnemy();
+            gameState.enemySpawnCounter = 0;
+        }
+
+        // 敵機更新與碰撞檢查 (與玩家底線)
+        gameState.enemies = gameState.enemies.filter(enemy => {
+            enemy.update();
+            if (enemy.y + enemy.height / 2 >= canvas.height - gameState.player.height) {
+                if (!gameState.isInvulnerable) { 
+                    gameState.lives--;
+                    triggerScreenShake(20);
+                    updateInfoDisplay();
+                } else {
+                    gainXP(CFG.XP_PER_KILL);
+                    gameState.score += CFG.SCORE_PER_KILL; 
+                }
+                
+                createExplosion(enemy.x, enemy.y, enemy.color);
+                return false; 
+            }
+            return true;
+        });
+        
+        handleCollisions();
+    }
+
+    function drawGameObjects() {
+        if (!ctx) return;
+        
+        // 1. 繪製流動的星場
+        gameState.stars.forEach(star => drawStar(star));
+
+        // 2. 繪製遊戲物件
+        gameState.enemies.forEach(enemy => enemy.draw());
+        gameState.bullets.forEach(bullet => bullet.draw());
+        gameState.player.draw();
+        gameState.particles.forEach(p => p.draw());
+    }
+
+    function handleCollisions() {
+        const bulletsToRemove = new Set();
+        const enemiesToRemove = new Set();
+        
+        // 應用玩家傷害乘數
+        const damageMultiplier = gameState.upgrades.damageMultiplier; 
+        
+        for (let i = 0; i < gameState.bullets.length; i++) {
+            const bullet = gameState.bullets[i];
+            const weapon = WEAPONS[bullet.weaponId];
+            const bulletCollisionHeight = bullet.radius * weapon.bulletHeightMultiplier * 1.5; 
+            const bulletCollisionWidth = bullet.radius * 2;
+            
+            // 計算子彈的實際傷害
+            const actualDamage = bullet.damage * damageMultiplier; 
+
+            for (let j = 0; j < gameState.enemies.length; j++) {
+                const enemy = gameState.enemies[j];
+                // 如果敵人已經被其他子彈標記移除，則跳過
+                if (enemiesToRemove.has(j)) continue; 
+                
+                const eBounds = enemy.getBounds();
+
+                if (bullet.x + bulletCollisionWidth / 2 > eBounds.x &&
+                    bullet.x - bulletCollisionWidth / 2 < eBounds.x + eBounds.width &&
+                    bullet.y + bulletCollisionHeight / 2 > eBounds.y &&
+                    bullet.y - bulletCollisionHeight / 2 < eBounds.y + eBounds.height) {
+                    
+                    bulletsToRemove.add(i); // 子彈總是移除
+                    
+                    enemy.health -= actualDamage; // 扣除傷害
+                    
+                    if (enemy.health <= 0) {
+                        enemiesToRemove.add(j);
+                        gainXP(CFG.XP_PER_KILL);
+                        gameState.score += CFG.SCORE_PER_KILL;
+                        createExplosion(enemy.x, enemy.y, enemy.color);
+                    } else {
+                         // 命中特效
+                        createExplosion(bullet.x, bullet.y, '#FF0000'); 
+                    }
+                    // 找到了碰撞，跳出內層迴圈，處理下一顆子彈
+                    break;
+                }
+            }
+        }
+        gameState.bullets = gameState.bullets.filter((_, index) => !bulletsToRemove.has(index));
+        gameState.enemies = gameState.enemies.filter((_, index) => !enemiesToRemove.has(index));
+    }
+    
+    function spawnEnemy() {
+        const x = Math.random() * (canvas.width - CFG.ENEMY_SIZE) + CFG.ENEMY_SIZE / 2;
+        const y = -CFG.ENEMY_SIZE;
+        gameState.enemies.push(createEnemy(x, y));
+    }
+    function shoot() {
+        if (!gameState.running) return;
+        gameState.bullets.push(createBullet(gameState.player.x, gameState.player.y, gameState.currentWeaponId));
+    }
+
+    // --- 資訊與狀態更新 ---
+    function updateInfoDisplay() {
+        infoScore.textContent = gameState.score;
+        infoLives.textContent = gameState.lives;
+        infoLives.style.color = gameState.lives > 1 ? '#14b8a6' : '#ff4444'; 
+        infoScore.style.color = '#00FFFF'; 
+        
+        // 更新等級與經驗值顯示
+        infoLevel.textContent = gameState.level;
+        const xpPercent = Math.min(100, (gameState.xp / gameState.xpToNextLevel) * 100);
+        infoXPBar.style.width = `${xpPercent}%`;
+        infoXPText.textContent = `${gameState.xp}/${gameState.xpToNextLevel} XP (下一級)`;
+    }
+    function updateSkillButton() {
+        const skill = SKILLS[gameState.currentSkillId];
+        skillNameDisplay.textContent = skill.name;
+        skillCountDisplay.textContent = gameState.skillCharges;
+        skillButton.disabled = gameState.skillCharges <= 0;
+    }
+    
+    // --- 模態視窗處理 ---
+    function showModal(title, message) {
+        modalTitle.textContent = title;
+        modalMessage.textContent = message;
+        modal.classList.remove('hidden');
+    }
+    function hideModal() {
+        modal.classList.add('hidden');
+    }
+
+    function showStartMenu() {
+        startMenu.classList.remove('hidden');
+        upgradeMenu.classList.add('hidden');
+        modalButton.textContent = '[啟動] 鎖定配置，開始作戰！';
+        modalButton.onclick = startGame;
+        showModal('[系統就緒] 初始化', '選擇你的高能武器和超級技能，準備進入戰區。');
+    }
+
+    function showUpgradeModal() {
+        startMenu.classList.add('hidden');
+        upgradeMenu.classList.remove('hidden');
+        modalButton.textContent = '繼續戰鬥';
+        modalButton.onclick = continueGame;
+        
+        showModal(`[恭喜] 升級至 LV.${gameState.level}`, '請選擇一項戰機強化：');
+        
+        renderUpgradeOptions();
+    }
+    
+    function renderUpgradeOptions() {
+        upgradeOptions.innerHTML = ''; // 清空舊選項
+        
+        // 隨機選擇 3 個不重複的升級
+        const shuffledUpgrades = [...UPGRADES].sort(() => 0.5 - Math.random());
+        const options = shuffledUpgrades.slice(0, 3);
+        
+        options.forEach(upgrade => {
+            const card = document.createElement('div');
+            card.className = 'upgrade-card flex flex-col items-center p-3 transition duration-150';
+            card.innerHTML = `
+                <span class="text-3xl mb-1">${upgrade.icon}</span>
+                <p class="font-bold text-lg text-yellow-300 mb-1">${upgrade.name}</p>
+                <p class="text-sm text-gray-400 text-center">${upgrade.description}</p>
+            `;
+            
+            card.onclick = () => selectUpgrade(upgrade);
+            upgradeOptions.appendChild(card);
+        });
+    }
+
+    function selectUpgrade(upgrade) {
+        upgrade.apply(gameState); // 應用升級效果
+        continueGame(); 
+    }
+    
+    function continueGame() {
+        gameState.isUpgrading = false;
+        hideModal();
+        gameState.running = true;
+        // 如果遊戲迴圈尚未啟動，則啟動
+        if (gameState.lives > 0) {
+            requestAnimationFrame(gameLoop);
+        }
+    }
+    
+    // --- 遊戲流程控制 ---
+    function initGame() {
+        if (!ctx) { ctx = canvas.getContext('2d'); }
+        resizeCanvas();
+
+        const selectedWeaponElement = document.querySelector('input[name="weapon"]:checked');
+        const selectedSkillElement = document.querySelector('input[name="skill"]:checked');
+        gameState.currentWeaponId = selectedWeaponElement ? selectedWeaponElement.value : 'blaster';
+        gameState.currentSkillId = selectedSkillElement ? selectedSkillElement.value : 'megabomb';
+        gameState.skillCharges = SKILLS[gameState.currentSkillId].initialCharges;
+        
+        // 重置所有變數
+        gameState.score = 0;
+        gameState.level = 1;
+        gameState.xp = 0;
+        gameState.xpToNextLevel = getXPToNextLevel(1);
+        gameState.upgrades = { damageMultiplier: 1, fireRateMultiplier: 1, maxLivesBonus: 0, speedMultiplier: 1 };
+        gameState.maxLives = CFG.MAX_LIVES; 
+        gameState.lives = gameState.maxLives;
+        
+        gameState.isInvulnerable = false;
+        gameState.shieldDuration = 0;
+        gameState.isUpgrading = false;
+        gameState.bullets = [];
+        gameState.enemies = [];
+        gameState.particles = [];
+        gameState.enemySpawnCounter = 0;
+        gameState.shootCooldown = 0;
+        
+        gameState.player = PlayerObject;
+        gameState.player.init(canvas.width / 2, canvas.height - 70); 
+        
+        updateInfoDisplay();
+        updateSkillButton(); 
+        hideModal();
+    }
+
+    function startGame() {
+        if (gameState.running) return;
+        initGame();
+        gameState.running = true;
+        requestAnimationFrame(gameLoop); 
+    }
+
+    function endGame(title, message) {
+        gameState.running = false;
+        showStartMenu(); 
+        showModal(title, message);
+    }
+
+    // --- 響應式和輸入處理 (修正 resizeCanvas 讓它更穩定) ---
+    function resizeCanvas() {
+        // 使用 window.innerHeight 確保在行動裝置上準確獲取可視區域高度
+        const windowHeight = window.innerHeight; 
+        const windowWidth = window.innerWidth;
+        
+        // 計算所有非 Canvas UI 元素的高度
+        const headerHeight = document.querySelector('h1')?.offsetHeight || 0;
+        const pHeight = document.querySelector('p')?.offsetHeight || 0;
+        const infoBarHeight = infoScore?.parentElement?.offsetHeight || 0;
+        const xpBarHeight = infoXPBar?.parentElement?.offsetHeight || 0;
+        const skillButtonHeight = skillButton?.parentElement?.offsetHeight || 0;
+        
+        // 估計所有上下邊距和間隙 (body padding-top: 1rem, padding-bottom: 1rem, h1/p margin, etc.)
+        const totalUIMargin = 40; 
+        
+        const totalUIHeight = headerHeight + pHeight + infoBarHeight + xpBarHeight + skillButtonHeight + totalUIMargin;
+
+        // 容器左右 1rem padding = 32px
+        const availableWidth = Math.min(windowWidth - 32, 600); 
+        const availableHeight = windowHeight - totalUIHeight; 
+        
+        const targetRatio = CFG.CANVAS_ASPECT_RATIO; 
+
+        let newWidth, newHeight;
+
+        // 優先以容器的寬度計算
+        newWidth = availableWidth;
+        newHeight = availableWidth / targetRatio;
+
+        // 如果計算出的高度超過可用高度，則以可用高度為基準
+        if (newHeight > availableHeight) {
+            newHeight = availableHeight;
+            newWidth = newHeight * targetRatio;
+        }
+
+        newWidth = Math.max(newWidth, 200); // 最小寬度
+        newHeight = Math.max(newHeight, 300); // 最小高度
+
+        canvas.width = newWidth;
+        canvas.height = newHeight;
+        
+        // 設置畫布的 style 尺寸，使其在容器中居中並適應
+        canvas.style.width = `${newWidth}px`;
+        canvas.style.height = `${newHeight}px`;
+
+        if (gameState.player) {
+            gameState.player.init(canvas.width / 2, canvas.height - 70);
+        }
+        
+        // 星星初始化
+        if (gameState.stars.length === 0) {
+            gameState.stars = [];
+            for (let i = 0; i < CFG.NUM_STARS; i++) {
+                gameState.stars.push(createStar());
+            }
+        }
+    }
+
+    function handlePointerMove(e) {
+        e.preventDefault(); // 防止移動時頁面滾動
+        if (!gameState.running) return;
+        const x = getCanvasPos(e);
+        gameState.targetX = x;
+    }
+
+    function handlePointerDown(e) {
+        e.preventDefault(); // 防止觸發原生瀏覽器行為
+        if (!gameState.running || gameState.isUpgrading) return;
+        
+        // 點擊即射擊
+        gameState.isShooting = true;
+        gameState.shootCooldown = 0;
+
+        const x = getCanvasPos(e);
+        gameState.targetX = x;
+    }
+
+    function handlePointerUp(e) {
+        e.preventDefault();
+        if (!gameState.running) return;
+        gameState.isShooting = false;
+        gameState.shootCooldown = 0;
+    }
+
+    function getCanvasPos(e) {
+        const rect = canvas.getBoundingClientRect();
+        let clientX = e.clientX;
+        
+        // 檢查是否為觸控事件
+        if (e.touches && e.touches.length > 0) {
+            clientX = e.touches[0].clientX;
+        }
+
+        const x = clientX - rect.left;
+        return x * (canvas.width / rect.width); // 縮放到畫布座標系
+    }
+
+
+    window.addEventListener('resize', resizeCanvas);
+    
+    window.onload = function() {
+        ctx = canvas.getContext('2d');
+        resizeCanvas();
+        
+        function animateMenu() {
+            if (gameState.running) {
+                if (gameState.player && gameState.player.x === 0 && canvas.width > 0) {
+                    gameState.player.init(canvas.width / 2, canvas.height - 70);
+                }
+                return;
+            }
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            gameState.stars.forEach(star => updateStar(star));
+            gameState.stars.forEach(star => drawStar(star));
+            
+            const tempEnemy = {
+                x: canvas.width / 2, y: canvas.height / 3, width: CFG.ENEMY_SIZE * 1.5, height: CFG.ENEMY_SIZE * 1.5, 
+                color: '#FFD700', angle: (Date.now() / 2000) * 0.5, rotationSpeed: 0,
+                health: 5, maxHealth: 5 // 為了展示生命條
+            };
+            drawEnemy(tempEnemy); 
+
+            requestAnimationFrame(animateMenu);
+        }
+        animateMenu();
+        
+        showStartMenu(); 
+        
+        // --- 綁定所有事件 (同時支援滑鼠和觸控) ---
+        canvas.addEventListener('mousemove', handlePointerMove);
+        canvas.addEventListener('mousedown', handlePointerDown);
+        canvas.addEventListener('mouseup', handlePointerUp);
+        
+        // 針對移動設備的觸控事件，使用 passive: false 來確保 preventDefault() 有效
+        canvas.addEventListener('touchmove', handlePointerMove, { passive: false });
+        canvas.addEventListener('touchstart', handlePointerDown, { passive: false });
+        canvas.addEventListener('touchend', handlePointerUp);
+        canvas.addEventListener('touchcancel', handlePointerUp);
+
+        skillButton.addEventListener('click', useSkill);
+
+        document.addEventListener('keydown', (e) => {
+            if (!gameState.running) return;
+            if (e.key === ' ' || e.key.toLowerCase() === 'space') {
+                e.preventDefault();
+                gameState.isShooting = true;
+            }
+            if (e.key.toLowerCase() === 'b') {
+                 useSkill();
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (!gameState.running) return;
+            if (e.key === ' ' || e.key.toLowerCase() === 'space') {
+                gameState.isShooting = false;
+            }
+        });
+    };
+
+</script>
+</body>
+</html>
